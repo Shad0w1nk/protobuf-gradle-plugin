@@ -83,8 +83,8 @@ task createClasspathManifest {
 }
 
 tasks.test.dependsOn tasks.createClasspathManifest
-tasks.test.dependsOn ":vendor:protobufExecutable",
-        ":vendor:protobufStaticLibrary", ":vendor:protobufLiteStaticLibrary"
+tasks.test.dependsOn "vendor:protobufExecutable",
+        "vendor:protobufStaticLibrary", "vendor:protobufLiteStaticLibrary"
 
 dependencies {
     compile gradleApi()
@@ -98,7 +98,7 @@ dependencies {
 }
 
 task wrapper(type: Wrapper) {
-    gradleVersion = '2.8'
+    gradleVersion = '2.10'
 }
 
 task sourcesJar(type: Jar, dependsOn:classes) {
