@@ -109,147 +109,181 @@ class ProtobufModelPlugin implements Plugin<Project> {
     @LanguageType
     void registerLanguage(LanguageTypeBuilder<ProtobufSourceSet> builder) {
       builder.setLanguageName("proto")
-      builder.defaultImplementation(ProtobufSourceSet.class)
+      builder.defaultImplementation(ProtobufSourceSet)
     }
 
-    @Mutate
-    void registerLanguageTransformation(LanguageTransformContainer languages, ProtobufConfigurator protobuf, ServiceRegistry serviceRegistry) {
-      languages.add(new Proto(protobuf, serviceRegistry))
-    }
+//    @Mutate
+//    void registerLanguageTransformation(LanguageTransformContainer languages, ProtobufConfigurator protobuf, ServiceRegistry serviceRegistry) {
+//      languages.add(new Proto(protobuf, serviceRegistry))
+//    }
 
     @Mutate
     void createDefaultProtobufSourceSets(ModelMap<NativeComponentSpec> components) {
-      components.all { component ->
-        if (!component.sources.containsKey('proto')) {
-          component.sources.create("proto", ProtobufSourceSet)
-        }
+      components.afterEach { component ->
+        //if (!component.sources.containsKey('proto')) {
+        component.sources.create("proto", ProtobufSourceSet)
+        //}
       }
+    }
+
+    @Mutate
+    void createCppSourceSet(ModelMap<NativeComponentSpec> components, ProtobufConfigurator protobuf) {
+        components.all { component ->
+            component.sources.withType(ProtobufSourceSet) { sourceSet ->
+                //def outputBaseDir = new File("${protobuf.generatedFilesBaseDir}/${sourceSet.name}")//${binary.name}/${sourceSet.name}")
+                CppSourceSet cppSourceSet = component.sources.create("${sourceSet.name}Cpp", CppSourceSet)
+
+
+
+                GenerateProtoTask compile = new GenerateProtoTask();
+                compile.description = "Compiles Proto source for '${sourceSet.name}'"
+                compile.outputBaseDir = new File("${protobuf.generatedFilesBaseDir}/${sourceSet.name}")
+
+                // Include sources
+                compile.inputs.source sourceSet.source
+                sourceSet.source.srcDirs.each { srcDir ->
+                  compile.include srcDir
+                }
+
+                compile.doneInitializing()
+                compile.builtins {
+                  cpp {}
+                }
+
+                cppSourceSet.generatedBy(compile)
+                cppSourceSet.source.srcDir("${compile.outputBaseDir}/cpp")
+                cppSourceSet.exportedHeaders.srcDir("${compile.outputBaseDir}/cpp")
+                it.generatedSourceSet.add cppSourceSet
+            }
+        }
     }
 
     @Finalize
     void bindDefaultProtoSourceSetToDefaultCppSourceSet(ModelMap<NativeComponentSpec> components) {
       components.all {
-        sources.proto.generatedSourceSet.withType(CppSourceSet) {
-          sources.cpp.lib it
-        }
-      }
-    }
-
-    @Mutate
-    void configureGeneratedSourceSets(TaskContainer tasks, ModelMap<NativeBinarySpec> binaries,
-                                      @Path("buildDir") File buildDir,
-                                      ServiceRegistry serviceRegistry,
-                                      ProtobufConfigurator protobuf) {
-      final FileResolver fileResolver = serviceRegistry.get(FileResolver.class);
-
-      binaries.each { binary ->
-        binary.tasks.withType(GenerateProtoTask) { task ->
-          tasks.create("compile${task.name.capitalize()}Cpp", CppCompile) {
-            SourceDirectorySet source = new DefaultSourceDirectorySet("${task.name}Cpp", "${task.name.capitalize()}Cpp", fileResolver);
-            source.srcDir(new File("${task.outputBaseDir}/cpp"));
-            it.source(source);
-            it.includes(new File("${task.outputBaseDir}/cpp"));
-
-            it.setDescription(String.format("Compiles the %s of %s", source, binary));
-            it.setObjectFileDir(new File("${buildDir}/objs/${binary.namingScheme.outputDirectoryBase}/${task.name}Cpp"));
-
-            def cppCompiler = binary.cppCompiler;
-            it.setMacros(cppCompiler.getMacros());
-            it.setCompilerArgs(cppCompiler.getArgs());
-            it.setTargetPlatform(binary.getTargetPlatform());
-            it.setToolChain(binary.getToolChain());
-            it.includes(new Callable<List<FileCollection>>() {
-              public List<FileCollection> call() {
-                Collection<NativeDependencySet> libs = binary.getLibs();
-                return CollectionUtils.collect(libs, new Transformer<FileCollection, NativeDependencySet>() {
-                  public FileCollection transform(NativeDependencySet original) {
-                    return original.getIncludeRoots();
-                  }
-                });
-              }
-            });
-
-
-            it.dependsOn(task);
-
-            binary.tasks.add(it);
-            binary.builtBy(it);
-            binary.binaryInputs(it.getOutputs().getFiles().getAsFileTree().matching(new PatternSet().include("**/*.obj", "**/*.o")));
+        sources.named("proto") {
+          generatedSourceSet.withType(CppSourceSet) {
+            sources.get('cpp').lib it
           }
         }
       }
     }
+
+//    @Mutate
+//    void configureGeneratedSourceSets(TaskContainer tasks, ModelMap<NativeBinarySpec> binaries,
+//                                      @Path("buildDir") File buildDir,
+//                                      ServiceRegistry serviceRegistry,
+//                                      ProtobufConfigurator protobuf) {
+//      final FileResolver fileResolver = serviceRegistry.get(FileResolver.class);
+//
+//      binaries.each { binary ->
+//        binary.tasks.withType(GenerateProtoTask) { task ->
+//          tasks.create("compile${task.name.capitalize()}Cpp", CppCompile) {
+//            SourceDirectorySet source = new DefaultSourceDirectorySet("${task.name}Cpp", "${task.name.capitalize()}Cpp", fileResolver);
+//            source.srcDir(new File("${task.outputBaseDir}/cpp"));
+//            it.source(source);
+//            it.includes(new File("${task.outputBaseDir}/cpp"));
+//
+//            it.setDescription(String.format("Compiles the %s of %s", source, binary));
+//            it.setObjectFileDir(new File("${buildDir}/objs/${binary.namingScheme.outputDirectoryBase}/${task.name}Cpp"));
+//
+//            def cppCompiler = binary.cppCompiler;
+//            it.setMacros(cppCompiler.getMacros());
+//            it.setCompilerArgs(cppCompiler.getArgs());
+//            it.setTargetPlatform(binary.getTargetPlatform());
+//            it.setToolChain(binary.getToolChain());
+//            it.includes(new Callable<List<FileCollection>>() {
+//              public List<FileCollection> call() {
+//                Collection<NativeDependencySet> libs = binary.getLibs();
+//                return CollectionUtils.collect(libs, new Transformer<FileCollection, NativeDependencySet>() {
+//                  public FileCollection transform(NativeDependencySet original) {
+//                    return original.getIncludeRoots();
+//                  }
+//                });
+//              }
+//            });
+//
+//
+//            it.dependsOn(task);
+//
+//            binary.tasks.add(it);
+//            binary.builtBy(it);
+//            binary.binaryInputs(it.getOutputs().getFiles().getAsFileTree().matching(new PatternSet().include("**/*.obj", "**/*.o")));
+//          }
+//        }
+//      }
+//    }
   }
 
-  // TODO: This should probably be pushed into Gradle core.
-  public class CppFile implements TransformationFileType {}
-
-  private static class Proto implements LanguageTransform<ProtobufSourceSet, CppFile> {
-    private final ProtobufConfigurator protobuf
-    private final ServiceRegistry serviceRegistry
-
-    public Proto(ProtobufConfigurator protobuf, ServiceRegistry serviceRegistry) {
-      this.protobuf = protobuf
-      this.serviceRegistry = serviceRegistry
-    }
-
-    public Class<ProtobufSourceSet> getSourceSetType() {
-      return ProtobufSourceSet.class;
-    }
-
-    @Override
-    Class<CppFile> getOutputType() {
-      return CppFile.class
-    }
-
-    public Map<String, Class<?>> getBinaryTools() {
-      Map<String, Class<?>> tools = Maps.newLinkedHashMap();
-      return tools;
-    }
-
-    public SourceTransformTaskConfig getTransformTask() {
-      new SourceTransformTaskConfig() {
-        @Override
-        String getTaskPrefix() {
-          return "generate"
-        }
-
-        @Override
-        Class<? extends DefaultTask> getTaskType() {
-          return GenerateProtoTask
-        }
-
-        @Override
-        void configureTask(Task task, BinarySpec binary, LanguageSourceSet sourceSet, ServiceRegistry serviceRegistry) {
-          final FileResolver fileResolver = serviceRegistry.get(FileResolver.class)
-          final Instantiator instantiator = serviceRegistry.get(Instantiator.class)
-
-          GenerateProtoTask compile = (GenerateProtoTask) task;
-          compile.description = "Compiles Proto source for '${sourceSet.name}'"
-          compile.outputBaseDir = new File("${protobuf.generatedFilesBaseDir}/${binary.name}/${sourceSet.name}")
-
-          // Include sources
-          compile.inputs.source sourceSet.source
-          sourceSet.source.srcDirs.each { srcDir ->
-            compile.include srcDir
-          }
-
-          compile.doneInitializing()
-          compile.builtins {
-            cpp {}
-          }
-
-          def cppSourceSet = BaseLanguageSourceSet.create(DefaultCppSourceSet.class, "${sourceSet.name}Cpp", sourceSet.name, fileResolver, instantiator);
-          cppSourceSet.source.srcDir("${compile.outputBaseDir}/cpp")
-          cppSourceSet.exportedHeaders.srcDir("${compile.outputBaseDir}/cpp")
-          sourceSet.generatedSourceSet.add(cppSourceSet)
-        }
-      }
-    }
-
-    @Override
-    boolean applyToBinary(BinarySpec binary) {
-      return binary instanceof NativeBinarySpec
-    }
-  }
+//  // TODO: This should probably be pushed into Gradle core.
+//  public class CppFile implements TransformationFileType {}
+//
+//  private static class Proto implements LanguageTransform<ProtobufSourceSet, CppFile> {
+//    private final ProtobufConfigurator protobuf
+//    private final ServiceRegistry serviceRegistry
+//
+//    public Proto(ProtobufConfigurator protobuf, ServiceRegistry serviceRegistry) {
+//      this.protobuf = protobuf
+//      this.serviceRegistry = serviceRegistry
+//    }
+//
+//    public Class<ProtobufSourceSet> getSourceSetType() {
+//      return ProtobufSourceSet.class;
+//    }
+//
+//    @Override
+//    Class<CppFile> getOutputType() {
+//      return CppFile.class
+//    }
+//
+//    public Map<String, Class<?>> getBinaryTools() {
+//      Map<String, Class<?>> tools = Maps.newLinkedHashMap();
+//      return tools;
+//    }
+//
+//    public SourceTransformTaskConfig getTransformTask() {
+//      new SourceTransformTaskConfig() {
+//        @Override
+//        String getTaskPrefix() {
+//          return "generate"
+//        }
+//
+//        @Override
+//        Class<? extends DefaultTask> getTaskType() {
+//          return GenerateProtoTask
+//        }
+//
+//        @Override
+//        void configureTask(Task task, BinarySpec binary, LanguageSourceSet sourceSet, ServiceRegistry serviceRegistry) {
+//          final FileResolver fileResolver = serviceRegistry.get(FileResolver.class)
+//          final Instantiator instantiator = serviceRegistry.get(Instantiator.class)
+//
+//          GenerateProtoTask compile = (GenerateProtoTask) task;
+//          compile.description = "Compiles Proto source for '${sourceSet.name}'"
+//          compile.outputBaseDir = new File("${protobuf.generatedFilesBaseDir}/${binary.name}/${sourceSet.name}")
+//
+//          // Include sources
+//          compile.inputs.source sourceSet.source
+//          sourceSet.source.srcDirs.each { srcDir ->
+//            compile.include srcDir
+//          }
+//
+//          compile.doneInitializing()
+//          compile.builtins {
+//            cpp {}
+//          }
+//
+//          //def cppSourceSet = BaseLanguageSourceSet.create(DefaultCppSourceSet.class, "${sourceSet.name}Cpp", sourceSet.name, fileResolver, instantiator);
+//          //cppSourceSet.source.srcDir("${compile.outputBaseDir}/cpp")
+//          //cppSourceSet.exportedHeaders.srcDir("${compile.outputBaseDir}/cpp")
+//          //sourceSet.generatedSourceSet.add(cppSourceSet)
+//        }
+//      }
+//    }
+//
+//    @Override
+//    boolean applyToBinary(BinarySpec binary) {
+//      return binary instanceof NativeBinarySpec
+//    }
+//  }
 }

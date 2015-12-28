@@ -28,6 +28,12 @@ model {
             path = "$rootDir/vendor/build/binaries/protocExecutable/protoc"
         }
     }
+
+    binaries.all {
+        if (toolChain in Clang || toolChain in Gcc) {
+            cppCompiler.args '-std=c++11'
+        }
+    }
 }
 
 tasks.withType(com.google.protobuf.gradle.GenerateProtoTask) {
@@ -38,12 +44,6 @@ tasks.withType(com.google.protobuf.gradle.GenerateProtoTask) {
 
     // Depends on the protoc binary
     dependsOn vendorModelRegistry.find(ModelPath.path('components.protoc.binaries.protocExecutable'), ModelType.of(NativeExecutableBinarySpec.class))
-}
-
-binaries.all {
-    if (toolChain in Clang || toolChain in Gcc) {
-        cppCompiler.args '-std=c++11'
-    }
 }
 
 task test(type: Exec) {

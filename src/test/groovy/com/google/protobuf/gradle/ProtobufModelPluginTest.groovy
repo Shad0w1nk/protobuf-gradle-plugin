@@ -10,6 +10,7 @@ class ProtobufModelPluginTest extends Specification {
   @Rule
   final TemporaryFolder testProjectDir = new TemporaryFolder()
   File buildFile
+  List<File> pluginClasspath
 
   def setup() {
     buildFile = testProjectDir.newFile('build.gradle')
@@ -19,53 +20,49 @@ class ProtobufModelPluginTest extends Specification {
       throw new IllegalStateException("Did not find plugin classpath resource, run `testClasses` build task.")
     }
 
-    def pluginClasspath = pluginClasspathResource.readLines()
-        .collect { it.replace('\\', '\\\\') } // escape backslashes in Windows paths
-        .collect { "'$it'" }
-        .join(", ")
-
-    // Add the logic under test to the test build
-    buildFile << """
-          buildscript {
-            dependencies {
-              classpath files($pluginClasspath)
-            }
-          }
-        """
+    pluginClasspath = pluginClasspathResource.readLines().collect { new File(it) }
+    println pluginClasspath
 
     // Generate some useful path
     def userDir = System.getProperty("user.dir").replace("\\", "\\\\")
     def vendorDir = "$userDir/vendor"
-    def vendorBinaryDir = "$vendorDir/build/binaries"
+    def vendorBuildDir = "$vendorDir/build"
 
     // Check to see if the vendor binaries were generated prior to running the test
-    assert new File("$vendorBinaryDir/protocExecutable").exists()
-    assert new File("$vendorBinaryDir/protobufStaticLibrary").exists()
-    assert new File("$vendorBinaryDir/protobufLiteStaticLibrary").exists()
+    assert new File("$vendorBuildDir/exe/protoc").exists()
+    assert new File("$vendorBuildDir/libs/protobuf").exists()
+    assert new File("$vendorBuildDir/libs/protobufLite").exists()
 
     buildFile << """
-          apply plugin: 'cpp'
+          plugins {
+            id 'cpp'
+            id 'com.google.protobuf'
+          }
+          //apply plugin: 'cpp'
 
           // Repositories doesn't seems to be working for this.
-          binaries.all {
-            if (toolChain instanceof VisualCpp) {
-              cppCompiler.args "/I$vendorDir/protobuf/src"
-              linker.args "/LIBPATH:$vendorBinaryDir/protobufStaticLibrary", "protobuf.lib"
-              linker.args "/LIBPATH:$vendorBinaryDir/protobufLiteStaticLibrary", "protobufLite.lib"
-            } else {
-              cppCompiler.args "-I$vendorDir/protobuf/src"
-              linker.args "-L$vendorBinaryDir/protobufStaticLibrary", "-lprotobuf"
-              linker.args "-L$vendorBinaryDir/protobufLiteStaticLibrary", "-lprotobufLite"
+          model {
+            binaries {
+              all {
+                if (toolChain instanceof VisualCpp) {
+                  cppCompiler.args "/I$vendorDir/protobuf/src"
+                  linker.args "/LIBPATH:$vendorBuildDir/libs/protobuf", "protobuf.lib"
+                  linker.args "/LIBPATH:$vendorBuildDir/libs/protobufLite", "protobufLite.lib"
+                } else {
+                  cppCompiler.args "-I$vendorDir/protobuf/src"
+                  linker.args "-L$vendorBuildDir/libs/protobuf", "-lprotobuf"
+                  linker.args "-L$vendorBuildDir/libs/protobufLite", "-lprotobufLite"
+                }
+              }
             }
           }
 
           import com.google.protobuf.gradle.*
-          apply plugin: 'com.google.protobuf'
 
           model {
             protobuf {
               protoc {
-                path = "$vendorBinaryDir/protocExecutable/protoc"
+                path = "$vendorBuildDir/exe/protoc/protoc"
               }
             }
           }
@@ -74,6 +71,18 @@ class ProtobufModelPluginTest extends Specification {
     testProjectDir.newFolder('src', 'main', 'cpp')
     testProjectDir.newFolder("src", "main", "proto")
   }
+
+    def "test"() {
+
+        buildFile << """
+println "TEST"
+"""
+        when: "tasks is invoked"
+        def result = GradleRunner.create().withProjectDir(testProjectDir.root).withArguments('tasks').withPluginClasspath(pluginClasspath).build()
+
+        then:
+        result.task(":tasks").outcome == TaskOutcome.SUCCESS
+    }
 
   def "a default protobuf source set exists for configuration"() {
     given: "a native executable with proto source set configuration"
@@ -88,7 +97,8 @@ class ProtobufModelPluginTest extends Specification {
     when: "tasks is invoked"
     def result = GradleRunner.create()
         .withProjectDir(testProjectDir.root)
-        .withArguments('tasks')
+        .withArguments('tasks', '--stacktrace')
+        .withPluginClasspath(pluginClasspath)
         .build()
 
     then: "it succeed"
@@ -119,6 +129,7 @@ class ProtobufModelPluginTest extends Specification {
     def result = GradleRunner.create()
         .withProjectDir(testProjectDir.root)
         .withArguments('mainExecutable')
+            .withPluginClasspath(pluginClasspath)
         .build()
 
     then: "the generate task is not ran"
@@ -148,6 +159,7 @@ class ProtobufModelPluginTest extends Specification {
     def result = GradleRunner.create()
         .withProjectDir(testProjectDir.root)
         .withArguments('tasks')
+            .withPluginClasspath(pluginClasspath)
         .build()
 
     then: "it succeed"
@@ -182,6 +194,7 @@ class ProtobufModelPluginTest extends Specification {
     def result = GradleRunner.create()
         .withProjectDir(testProjectDir.root)
         .withArguments('mainExecutable')
+            .withPluginClasspath(pluginClasspath)
         .build()
 
     then: "the generate task is successfully invoked"
@@ -218,6 +231,7 @@ class ProtobufModelPluginTest extends Specification {
     def result = GradleRunner.create()
         .withProjectDir(testProjectDir.root)
         .withArguments('mainExecutable')
+            .withPluginClasspath(pluginClasspath)
         .build()
 
     then: "the generate task is successfully invoked"
@@ -271,6 +285,7 @@ class ProtobufModelPluginTest extends Specification {
     def result = GradleRunner.create()
         .withProjectDir(testProjectDir.root)
         .withArguments('mainExecutable')
+            .withPluginClasspath(pluginClasspath)
         .build()
 
     then: "the generate tasks are successfully invoked"
@@ -338,6 +353,7 @@ class ProtobufModelPluginTest extends Specification {
     def result = GradleRunner.create()
         .withProjectDir(testProjectDir.root)
         .withArguments('mainExecutable')
+            .withPluginClasspath(pluginClasspath)
         .build()
 
     then: "generate task succeed"

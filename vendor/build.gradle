@@ -35,7 +35,7 @@ project(':vendor') {
             }
           }
         }
-        binaries.all {
+        binaries.withType(StaticLibraryBinarySpec) {
           lib library: 'protobuf', linkage: 'api'
         }
       }
@@ -48,7 +48,7 @@ project(':vendor') {
           }
         }
 
-        binaries.all {
+        binaries.withType(NativeExecutableBinarySpec) {
           lib library: 'protocLib', linkage: 'static'
           lib library: 'protobuf', linkage: 'static'
           lib library: 'protobufLite', linkage: 'static'
@@ -150,19 +150,24 @@ project(':vendor') {
             srcDir "protobuf/src"
           }
         }
-        binaries.all {
+        binaries.withType(StaticLibraryBinarySpec) {
           lib library: 'protobufLite', linkage: 'api'
         }
       }
     }
-  }
-    
-  binaries.all {
-    if (toolChain in Clang || toolChain in Gcc) {
-      cppCompiler.args '-DHAVE_PTHREAD', '-Wall', '-Wwrite-strings', '-Woverloaded-virtual',
-              '-Wno-sign-compare',
-              '-Wno-error=unused-function'
-      linker.args '-lpthread'
+
+    binaries {
+      all {
+        if (toolChain in Clang || toolChain in Gcc) {
+          cppCompiler.args '-DHAVE_PTHREAD', '-Wall', '-Wwrite-strings', '-Woverloaded-virtual',
+                  '-Wno-sign-compare',
+                  '-Wno-error=unused-function'
+          linker.args '-lpthread'
+        }
+      }
+      withType(SharedLibraryBinarySpec) {
+        buildable = false
+      }
     }
   }
 }

@@ -20,9 +20,9 @@ if (gradle.startParameter.taskNames.intersect(['install', 'uploadArchives', 'pub
   project(':testProjectCustomProtoDir').projectDir = "$rootDir/testProjectCustomProtoDir" as File
   include ':testProjectDependent'
   project(':testProjectDependent').projectDir = "$rootDir/testProjectDependent" as File
-  include ':testProjectAndroid'
-  project(':testProjectAndroid').projectDir = "$rootDir/testProjectAndroid" as File
-  include ':testProjectNative'
-  project(':testProjectNative').projectDir = "$rootDir/testProjectNative" as File
+  //include ':testProjectAndroid'
+  //project(':testProjectAndroid').projectDir = "$rootDir/testProjectAndroid" as File
+  //include ':testProjectNative'
+  //project(':testProjectNative').projectDir = "$rootDir/testProjectNative" as File
   include ':vendor'
 }
